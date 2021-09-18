@@ -4,22 +4,98 @@ output:
   html_document:
     keep_md: true
 ---
-
-
+## Load required packages {.tabset}  
+### Dplyr
+```{r, echo=TRUE}
+if(!require(dplyr)) {install.packages('dplyr', dependencies = TRUE)}
+library(dplyr)
+```
+### Ggplot
+```{r, echo=TRUE}
+if(!require(ggplot2)) {install.packages('ggplot2', dependencies = TRUE)}
+library(ggplot2)
+theme_set(theme_bw())
+```
+### KableExtra
+```{r, echo=TRUE}
+if(!require(kableExtra)) {install.packages('kableExtra', dependencies = TRUE)}
+library(kableExtra)
+```
+### Lubridate
+```{r, echo=TRUE}
+if(!require(lubridate)) {install.packages('lubridate', dependencies = TRUE)}
+library(lubridate)
+```
 ## Loading and preprocessing the data
 
-
-
+```{r, echo=TRUE}
+activity <- read.csv(unzip('activity.zip'))
+sapply(activity, class)
+activity$date <- as.Date(activity$date, '%Y-%m-%d')
+head(activity) %>% kbl() %>% kable_paper('hover', full_width = F, position = 'left')
+```
 ## What is mean total number of steps taken per day?
 
+```{r, echo = TRUE}
+step_count <- activity %>% na.omit(steps) %>% group_by(date) %>% summarize(Total_steps = sum(steps))
+
+s1 <- qplot(step_count$Total_steps, geom = 'histogram', main = 'Histogram of Total Steps per Day  ',
+      xlab = 'Number of Steps', ylab = 'Count', fill = I('cyan4'), col = I('white'), alpha = I(0.4))
+print(s1)
+mean_step <- round(mean(step_count$Total_steps), digits = 0)
+median_step <- round(median(step_count$Total_steps), digits = 0)
+```
+The mean of total steps per day is **`r as.character(mean_step)`** and the median is **`r as.character(median_step)`**
 
 
 ## What is the average daily activity pattern?
 
-
+```{r, echo=TRUE}
+pattern <- activity %>% na.omit(steps) %>% group_by(interval) %>% summarize(Average_steps = mean(steps))
+ggplot(pattern, aes(x = interval, y = Average_steps)) + geom_line(color = 'cyan4', size = 1) +
+  geom_area(fill = 'cyan4', alpha = 0.4) +
+  labs(x = 'Interval', y = 'Number of Steps') +
+  ggtitle('Average Daily Activity Pattern')
+step_max <- pattern$interval[which.max(pattern$Average_steps)]
+```
+Interval containing the maximum number of steps on average is **`r step_max`**
 
 ## Imputing missing values
 
+```{r, echo = TRUE}
+na_count <- sum(is.na(activity))
+```
+Total NA values in the dataset is **`r na_count`**
 
+```{r, echo = TRUE}
+activity_filled <- activity %>% group_by(interval) %>%
+  mutate(steps = case_when(is.na(steps) ~ mean(steps, na.rm=TRUE),
+                           TRUE~as.numeric(steps)))
+#activity_filled <- activity %>% group_by(interval) %>%
+  #mutate(across(steps, ~case_when(is.na(.) ~ mean(., na.rm = TRUE), TRUE ~ as.numeric(.))))
+#activity_filled <- activity %>% group_by(interval) %>%
+  #mutate(steps = if_else(is.na(steps), mean(steps, na.rm=TRUE), as.numeric(steps)))
+step_count_filled <- activity_filled %>% group_by(date) %>% summarize(Total_steps = sum(steps))
+
+s2 <- qplot(step_count_filled$Total_steps, geom = 'histogram', main = 'Histogram of Total Steps per Day
+            with filled NA', xlab = 'Number of Steps', ylab = 'Count', fill = I('cyan4'), col = I('white'), alpha = I(0.4))
+print(s2)
+gridExtra::grid.arrange(s1,s2, ncol=2)
+
+meanstep <- round(mean(step_count_filled$Total_steps), digits = 0)
+medianstep <- round(median(step_count_filled$Total_steps), digits = 0)
+```
+The mean of total steps per day after filling NA values is **`r as.character(meanstep)`** and the median is **`r as.character(medianstep)`**. The histogram show a different distribution with the total steps populate around ~1000 steps/day. A higher frequency was also observed.
 
 ## Are there differences in activity patterns between weekdays and weekends?
+
+```{r}
+activity_filled <- activity_filled %>% mutate(Week_day = as.character(wday(date, label = TRUE))) %>% mutate(Week_day = if_else(Week_day %in% c('Sat', 'Sun'), 'Weekend', 'Weekday'))
+activity_filled$Week_day <- as.factor(activity_filled$Week_day)
+head(activity_filled) %>% kbl() %>% kable_paper('hover', full_width = F, position = 'left')
+wdwe <- activity_filled %>% group_by(Week_day, interval) %>% summarize(Average_steps = mean(steps))
+ggplot(wdwe, aes(x = interval, y = Average_steps)) + geom_line(color = 'cyan4', size = 1) +
+  geom_area(fill = 'cyan4', alpha = 0.4) + facet_grid(rows = vars(Week_day)) + labs(x = 'Interval', y = 'Number of Steps') +
+  ggtitle('Comparision between weekday vs weekend activity')
+```
+During weekends, users tend to start activity later but maintain a higher frequency throughout the day.
